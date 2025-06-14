@@ -3,7 +3,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from config.config import Config
 from src.bot.handlers import BotHandlers
 
-# Set up logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO if Config.DEBUG else logging.WARNING
@@ -14,25 +13,45 @@ class WorkoutBot:
     def __init__(self):
         """Initialize the workout bot"""
         self.application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
+        self.handlers = BotHandlers() 
     
     def setup_handlers(self):
         """Set up all bot handlers"""
         # Command handlers
         self.application.add_handler(CommandHandler("start", BotHandlers.start_command))
         self.application.add_handler(CommandHandler("help", BotHandlers.help_command))
-        
+        self.application.add_handler(CommandHandler("schedule", BotHandlers.handle_schedule_command))
+
         # Callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(
             BotHandlers.handle_fitness_level, 
             pattern="^level_"
         ))
         
-        # Message handlers for general messages
+        # Handle both exercise completion and skip
+        self.application.add_handler(CallbackQueryHandler(
+            self.handlers.handle_exercise_completion,
+            pattern="^exercise_(done|skip)_"
+        ))
+
+        # Handle both diet completion and skip
+        self.application.add_handler(CallbackQueryHandler(
+            BotHandlers.handle_diet_completion,
+            pattern="^diet_(complete|skip)_"
+        ))
+
+        # Handle other callback queries
+        self.application.add_handler(CallbackQueryHandler(
+            BotHandlers.handle_callback_queries,
+            pattern="^(?!exercise_(done|skip)_|diet_(complete|skip)_|level_)"
+        ))
+
+        # Message handlers for Gemini Q&A
         self.application.add_handler(MessageHandler(
             filters.TEXT & ~filters.COMMAND, 
             BotHandlers.handle_general_message
         ))
-        
+
         # Error handler
         self.application.add_error_handler(BotHandlers.error_handler)
         
@@ -41,15 +60,11 @@ class WorkoutBot:
     def run(self):
         """Run the bot synchronously using run_polling"""
         try:
-            # Validate configuration
             Config.validate_config()
             logger.info("Configuration validated successfully")
-            
-            # Set up bot handlers
             self.setup_handlers()
             logger.info("Bot handlers set")
 
-            # Start bot polling (blocking call)
             logger.info("🤖 Bot is running! Press Ctrl+C to stop.")
             self.application.run_polling(allowed_updates=["message", "callback_query"])
 
